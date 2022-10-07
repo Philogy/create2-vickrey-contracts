@@ -1,4 +1,7 @@
 node_modules
-out
 cache
 .env
+!out/
+out/*
+!out/Auction.sol
+!out/AuctionFactory.sol
