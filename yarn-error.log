@@ -1,0 +1,42 @@
+Arguments: 
+  /home/philogy/.nvm/versions/node/v16.17.1/bin/node /home/philogy/.cache/node/corepack/yarn/1.22.19/bin/yarn.js add -D prettier prettier-plugin-prettier
+
+PATH: 
+  /home/philogy/.nvm/versions/node/v16.17.1/bin:/home/philogy/.npm-global/bin:/usr/local/bin:/home/philogy/.local/bin:/home/philogy/.yarn/bin:/home/philogy/.local/bin:/home/philogy/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin:/home/philogy/.foundry/bin:/home/philogy/.huff/bin
+
+Yarn version: 
+  1.22.19
+
+Node version: 
+  16.17.1
+
+Platform: 
+  linux x64
+
+Trace: 
+  Error: https://registry.yarnpkg.com/prettier-plugin-prettier: Not found
+      at Request.params.callback [as _callback] (/home/philogy/.cache/node/corepack/yarn/1.22.19/lib/cli.js:66145:18)
+      at Request.self.callback (/home/philogy/.cache/node/corepack/yarn/1.22.19/lib/cli.js:140890:22)
+      at Request.emit (node:events:513:28)
+      at Request.<anonymous> (/home/philogy/.cache/node/corepack/yarn/1.22.19/lib/cli.js:141862:10)
+      at Request.emit (node:events:513:28)
+      at IncomingMessage.<anonymous> (/home/philogy/.cache/node/corepack/yarn/1.22.19/lib/cli.js:141784:12)
+      at Object.onceWrapper (node:events:627:28)
+      at IncomingMessage.emit (node:events:525:35)
+      at endReadableNT (node:internal/streams/readable:1358:12)
+      at processTicksAndRejections (node:internal/process/task_queues:83:21)
+
+npm manifest: 
+  {
+    "name": "create2-vickrey-contracts",
+    "version": "1.0.0",
+    "main": "index.js",
+    "author": "philogy <philippe@dumo.net>",
+    "license": "MIT"
+  }
+
+yarn manifest: 
+  No manifest
+
+Lockfile: 
+  No lockfile
