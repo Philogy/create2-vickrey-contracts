@@ -11,6 +11,14 @@ contract Auction {
         address indexed newOwner
     );
     event RevealStarted();
+    event BidRevealed(
+        address indexed topBidder,
+        address indexed bidder,
+        uint256 topBid,
+        uint256 sndBid,
+        uint256 bid
+    );
+    event WinClaimed(address indexed winner, uint256 paidBid, uint256 refund);
 
     error AlreadyInitialized();
     error InvalidRevealStartBlock();
@@ -103,26 +111,26 @@ contract Auction {
         uint256 _balAtSnapshot,
         bytes memory _proof
     ) external returns (address bidAddr) {
-        if (revealStartBlock + 7200 < block.number) revert RevealOver();
-        bytes32 storedBlockHashCached = storedBlockHash;
-        if (storedBlockHashCached == bytes32(0)) revert NotYetReveal();
-        (bytes32 salt, address depositAddr) = getBidDepositAddr(
-            _bidder,
-            _bid,
-            _subSalt
-        );
-
-        if (
-            !_verifyProof(
-                storedBlockHashCached,
-                depositAddr,
-                _balAtSnapshot,
-                _proof
-            )
-        ) revert InvalidProof();
-
         uint256 totalBid;
         {
+            if (revealStartBlock + 7200 < block.number) revert RevealOver();
+            bytes32 storedBlockHashCached = storedBlockHash;
+            if (storedBlockHashCached == bytes32(0)) revert NotYetReveal();
+            (bytes32 salt, address depositAddr) = getBidDepositAddr(
+                _bidder,
+                _bid,
+                _subSalt
+            );
+
+            if (
+                !_verifyProof(
+                    storedBlockHashCached,
+                    depositAddr,
+                    _balAtSnapshot,
+                    _proof
+                )
+            ) revert InvalidProof();
+
             uint256 balBefore = address(this).balance;
             assembly {
                 mstore(0x00, BID_EXTRACTOR_CODE)
@@ -140,21 +148,31 @@ contract Auction {
         uint256 actualBid = min(_bid, _balAtSnapshot);
         uint256 bidderRefund = totalBid - actualBid;
 
-        uint256 topBidCached = topBid;
+        uint128 topBidCached = topBid;
+        uint128 sndBidCached = sndBid;
+        address topBidderCached = topBidder;
         if (actualBid > topBidCached) {
-            address prevTopBidder = topBidder;
-            topBidder = _bidder;
-            (topBid, sndBid) = (uint128(actualBid), uint128(topBidCached));
-            if (prevTopBidder != address(0) && topBidCached > 0)
-                pendingPulls[prevTopBidder] += topBidCached;
+            if (topBidderCached != address(0) && topBidCached > 0)
+                pendingPulls[topBidderCached] += topBidCached;
+            topBidder = topBidderCached = _bidder;
+            sndBid = sndBidCached = uint128(topBidCached);
+            topBid = topBidCached = uint128(actualBid);
         } else {
             if (actualBid > sndBid) {
-                sndBid = uint128(actualBid);
+                sndBid = sndBidCached = uint128(actualBid);
             }
             bidderRefund += actualBid;
         }
 
         if (bidderRefund > 0) pendingPulls[_bidder] += bidderRefund;
+
+        emit BidRevealed(
+            topBidderCached,
+            _bidder,
+            topBidCached,
+            sndBidCached,
+            actualBid
+        );
     }
 
     function claimWin(address _collection, uint256 _tokenId) external {
@@ -172,8 +190,12 @@ contract Auction {
             _tokenId
         );
         tokenCommit = bytes32(0);
-        pendingPulls[topBidder] += topBid - sndBid;
-        pendingPulls[owner] += sndBid;
+        address topBidderCached = topBidder;
+        uint256 paidBid = sndBid;
+        uint256 refund = topBid - paidBid;
+        pendingPulls[topBidderCached] += refund;
+        pendingPulls[owner] += paidBid;
+        emit WinClaimed(topBidderCached, paidBid, refund);
     }
 
     function pull(address _addr) external {
