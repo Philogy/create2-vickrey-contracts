@@ -3,9 +3,10 @@ pragma solidity 0.8.15;
 
 import {IERC721} from "@openzeppelin/token/ERC721/IERC721.sol";
 import {SafeTransferLib} from "solmate/utils/SafeTransferLib.sol";
+import {Multicallable} from "solady/utils/Multicallable.sol";
 
 /// @author philogy <https://github.com/philogy>
-contract Auction {
+contract Auction is Multicallable {
     event OwnershipTransferred(
         address indexed previousOwner,
         address indexed newOwner
