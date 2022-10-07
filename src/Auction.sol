@@ -2,6 +2,7 @@
 pragma solidity 0.8.15;
 
 import {IERC721} from "@openzeppelin/token/ERC721/IERC721.sol";
+import {SafeTransferLib} from "solmate/utils/SafeTransferLib.sol";
 
 /// @author philogy <https://github.com/philogy>
 contract Auction {
@@ -32,7 +33,7 @@ contract Auction {
     uint256 internal constant BID_EXTRACTOR_CODE_SIZE = 0x8;
     uint256 internal constant BID_EXTRACTOR_CODE_OFFSET = 0x18;
 
-    mapping(address => uint256) internal directETHRefunds;
+    mapping(address => uint256) internal pendingPulls;
 
     address public owner;
     uint96 public revealStartBlock;
@@ -120,17 +121,22 @@ contract Auction {
             )
         ) revert InvalidProof();
 
-        uint256 balBefore = address(this).balance;
-        assembly {
-            mstore(0x00, BID_EXTRACTOR_CODE)
-            bidAddr := create2(
-                0,
-                BID_EXTRACTOR_CODE_OFFSET,
-                BID_EXTRACTOR_CODE_SIZE,
-                salt
-            )
+        uint256 totalBid;
+        {
+            uint256 balBefore = address(this).balance;
+            assembly {
+                mstore(0x00, BID_EXTRACTOR_CODE)
+                bidAddr := create2(
+                    0,
+                    BID_EXTRACTOR_CODE_OFFSET,
+                    BID_EXTRACTOR_CODE_SIZE,
+                    salt
+                )
+            }
+
+            totalBid = address(this).balance - balBefore;
         }
-        uint256 totalBid = address(this).balance - balBefore;
+
         uint256 actualBid = min(_bid, _balAtSnapshot);
         uint256 bidderRefund = totalBid - actualBid;
 
@@ -138,16 +144,17 @@ contract Auction {
         if (actualBid > topBidCached) {
             address prevTopBidder = topBidder;
             topBidder = _bidder;
+            (topBid, sndBid) = (uint128(actualBid), uint128(topBidCached));
             if (prevTopBidder != address(0) && topBidCached > 0)
-                directETHRefunds[prevTopBidder] += topBidCached;
+                pendingPulls[prevTopBidder] += topBidCached;
         } else {
             if (actualBid > sndBid) {
-                sndBid = actualBid;
+                sndBid = uint128(actualBid);
             }
             bidderRefund += actualBid;
         }
 
-        if (bidderRefund > 0) directETHRefunds[_bidder] += bidderRefund;
+        if (bidderRefund > 0) pendingPulls[_bidder] += bidderRefund;
     }
 
     function claimWin(address _collection, uint256 _tokenId) external {
@@ -165,8 +172,14 @@ contract Auction {
             _tokenId
         );
         tokenCommit = bytes32(0);
-        directETHRefunds[topBidder] += topBid - sndBid;
-        directETHRefunds[owner] += sndBid;
+        pendingPulls[topBidder] += topBid - sndBid;
+        pendingPulls[owner] += sndBid;
+    }
+
+    function pull(address _addr) external {
+        uint256 totalPull = pendingPulls[_addr];
+        pendingPulls[_addr] = 0;
+        if (totalPull > 0) SafeTransferLib.safeTransferETH(_addr, totalPull);
     }
 
     function getBidDepositAddr(
@@ -199,6 +212,7 @@ contract Auction {
     function _verifyProof(
         bytes32,
         address,
+        uint256,
         bytes memory
     ) internal view returns (bool) {
         return true;
