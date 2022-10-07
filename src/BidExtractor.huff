@@ -1,0 +1,11 @@
+#define macro CONSTRUCTOR() = takes (0) returns (0) {
+  returndatasize returndatasize returndatasize returndatasize
+  selfbalance
+  caller
+  gas
+  call
+}
+
+#define macro MAIN() = takes(0) returns(0) {
+  
+}
