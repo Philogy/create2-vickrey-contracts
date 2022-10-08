@@ -2,12 +2,11 @@
 pragma solidity 0.8.15;
 
 import {IERC721} from "@openzeppelin/token/ERC721/IERC721.sol";
-import {Test} from "forge-std/Test.sol";
 import {SafeTransferLib} from "solmate/utils/SafeTransferLib.sol";
 import {Multicallable} from "solady/utils/Multicallable.sol";
 
 /// @author philogy <https://github.com/philogy>
-contract Auction is Multicallable, Test {
+contract Auction is Multicallable {
     event OwnershipTransferred(
         address indexed previousOwner,
         address indexed newOwner
@@ -48,7 +47,7 @@ contract Auction is Multicallable, Test {
     uint256 internal constant BID_EXTRACTOR_CODE_SIZE = 0x8;
     uint256 internal constant BID_EXTRACTOR_CODE_OFFSET = 0x18;
 
-    mapping(address => uint256) internal pendingPulls;
+    mapping(address => uint256) public pendingPulls;
 
     address public owner;
     uint96 public revealStartBlock;
@@ -148,7 +147,6 @@ contract Auction is Multicallable, Test {
                     salt
                 )
             }
-
             totalBid = address(this).balance - balBefore;
         }
 
@@ -249,6 +247,7 @@ contract Auction is Multicallable, Test {
         if (_amount > 0) {
             if (_addr == address(0)) _addr = owner;
             uint256 totalPending = pendingPulls[_addr] + _amount;
+            pendingPulls[_addr] = totalPending;
             emit AsyncSend(_addr, _amount, totalPending);
         }
     }

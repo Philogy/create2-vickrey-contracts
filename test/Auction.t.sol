@@ -63,6 +63,48 @@ contract AuctionTest is BaseTest {
         assertEq(auction.owner(), users[2]);
     }
 
+    function testSimpleBids(uint256[4] memory bids) public {
+        for (uint256 i; i < 4; i++) vm.assume(bids[i] <= 100 ether);
+
+        // create auction
+        uint256 revealStartBlock = block.number + 100;
+        Auction auction = createAuction(users[4], revealStartBlock, bytes32(0));
+
+        // create and fund bids
+        bytes32[4] memory subSalts;
+        for (uint256 i; i < 4; i++) {
+            subSalts[i] = genBytes32();
+            (, address bidAddr) = auction.getBidDepositAddr(
+                users[i],
+                bids[i],
+                subSalts[i]
+            );
+            vm.deal(bidAddr, bids[i]);
+        }
+
+        vm.roll(revealStartBlock + 1);
+        auction.startReveal();
+
+        for (uint256 i; i < 4; i++) {
+            auction.reveal(users[i], bids[i], subSalts[i], bids[i], "");
+        }
+
+        // check final results
+        uint256 topBidderId = 0;
+        for (uint256 i; i < 4; i++) {
+            if (bids[i] > bids[topBidderId]) topBidderId = i;
+        }
+        uint256 secondBidderId = (topBidderId + 1) % 4;
+        for (uint256 i; i < 4; i++) {
+            if (i == topBidderId) continue;
+            if (bids[i] > bids[secondBidderId]) secondBidderId = i;
+            assertEq(auction.pendingPulls(users[i]), bids[i], "pending pulls");
+        }
+        assertEq(auction.topBidder(), users[topBidderId]);
+        assertEq(auction.topBid(), bids[topBidderId]);
+        assertEq(auction.sndBid(), bids[secondBidderId]);
+    }
+
     function createAuction(
         address _initialOwner,
         uint256 _revealStartBlock,
