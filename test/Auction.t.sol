@@ -105,6 +105,11 @@ contract AuctionTest is BaseTest {
         assertEq(auction.sndBid(), bids[secondBidderId]);
     }
 
+    function testLateRevealStart() public {
+        uint256 revealStartBlock = block.number + 100;
+        Auction auction = createAuction(users[0], revealStartBlock, bytes32(0));
+    }
+
     function createAuction(
         address _initialOwner,
         uint256 _revealStartBlock,

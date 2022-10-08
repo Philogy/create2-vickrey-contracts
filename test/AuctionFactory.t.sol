@@ -43,7 +43,7 @@ contract AuctionFactoryTest is BaseTest {
             address(factory),
             tokenId,
             abi.encodeCall(
-                AuctionFactory.internalCreateAuction,
+                AuctionFactory.innerCreateAuction,
                 (users[0], revealStartBlock)
             )
         );

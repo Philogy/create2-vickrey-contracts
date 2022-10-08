@@ -25,7 +25,7 @@ contract AuctionFactory is ERC721TokenReceiver {
         auctionImplementation = address(new Auction());
     }
 
-    function internalCreateAuction(address, uint256) external {
+    function innerCreateAuction(address, uint256) external {
         revert NotCallable();
     }
 
@@ -39,7 +39,7 @@ contract AuctionFactory is ERC721TokenReceiver {
         assembly {
             dataSelector := mload(add(_data, 0x20))
         }
-        if (dataSelector != AuctionFactory.internalCreateAuction.selector)
+        if (dataSelector != AuctionFactory.innerCreateAuction.selector)
             revert InvalidERC721ReceiveData();
 
         // remove first 4 bytes from `_data`
