@@ -11,6 +11,11 @@ contract AuctionTest is BaseTest {
     uint256 internal constant TOTAL_USERS = 5;
     address payable internal baseAuction;
 
+    event OwnershipTransferred(
+        address indexed previousOwner,
+        address indexed newOwner
+    );
+
     function setUp() public {
         vm.roll(10000);
         initUsers(TOTAL_USERS);
@@ -29,11 +34,7 @@ contract AuctionTest is BaseTest {
 
     function testBidAddress() public {
         uint256 revealStartBlock = block.number + 100;
-        Auction auction = createAuction(
-            users[0],
-            block.number + 100,
-            bytes32(0)
-        );
+        Auction auction = createAuction(users[0], revealStartBlock, bytes32(0));
         bytes32 subSalt = genBytes32();
         uint256 bid = 0.05 ether;
         (, address bidAddr) = auction.getBidDepositAddr(users[1], bid, subSalt);
@@ -44,6 +45,22 @@ contract AuctionTest is BaseTest {
 
         address realBidAddr = auction.reveal(users[1], bid, subSalt, bid, "");
         assertEq(bidAddr, realBidAddr);
+    }
+
+    function testTransferOwnership() public {
+        uint256 revealStartBlock = block.number + 100;
+        Auction auction = createAuction(users[0], revealStartBlock, bytes32(0));
+        assertEq(auction.owner(), users[0]);
+
+        vm.expectRevert(Auction.NotOwner.selector);
+        vm.prank(users[1]);
+        auction.transferOwnership(users[2]);
+
+        vm.expectEmit(true, true, true, true);
+        emit OwnershipTransferred(users[0], users[2]);
+        vm.prank(users[0]);
+        auction.transferOwnership(users[2]);
+        assertEq(auction.owner(), users[2]);
     }
 
     function createAuction(

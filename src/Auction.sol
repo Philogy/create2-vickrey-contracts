@@ -20,6 +20,11 @@ contract Auction is Multicallable, Test {
         uint256 sndBid,
         uint256 bid
     );
+    event AsyncSend(
+        address indexed account,
+        uint256 sendAmount,
+        uint256 totalPendingAmount
+    );
     event WinClaimed(address indexed winner, uint256 paidBid, uint256 refund);
 
     error AlreadyInitialized();
@@ -154,19 +159,16 @@ contract Auction is Multicallable, Test {
         uint128 sndBidCached = sndBid;
         address topBidderCached = topBidder;
         if (actualBid > topBidCached) {
-            if (topBidderCached != address(0) && topBidCached > 0)
-                pendingPulls[topBidderCached] += topBidCached;
+            _asyncSend(topBidderCached, topBidCached);
             topBidder = topBidderCached = _bidder;
             sndBid = sndBidCached = uint128(topBidCached);
             topBid = topBidCached = uint128(actualBid);
         } else {
-            if (actualBid > sndBid) {
-                sndBid = sndBidCached = uint128(actualBid);
-            }
+            if (actualBid > sndBid) sndBid = sndBidCached = uint128(actualBid);
             bidderRefund += actualBid;
         }
 
-        if (bidderRefund > 0) pendingPulls[_bidder] += bidderRefund;
+        _asyncSend(_bidder, bidderRefund);
 
         emit BidRevealed(
             topBidderCached,
@@ -195,15 +197,16 @@ contract Auction is Multicallable, Test {
         address topBidderCached = topBidder;
         uint256 paidBid = sndBid;
         uint256 refund = topBid - paidBid;
-        pendingPulls[topBidderCached] += refund;
-        pendingPulls[owner] += paidBid;
+        _asyncSend(topBidderCached, refund);
+        _asyncSend(owner, paidBid);
         emit WinClaimed(topBidderCached, paidBid, refund);
     }
 
-    function pull(address _addr) external {
-        uint256 totalPull = pendingPulls[_addr];
-        pendingPulls[_addr] = 0;
-        if (totalPull > 0) SafeTransferLib.safeTransferETH(_addr, totalPull);
+    function pull(address _addr) external returns (uint256 totalPull) {
+        if ((totalPull = pendingPulls[_addr]) > 0) {
+            pendingPulls[_addr] = 0;
+            SafeTransferLib.safeTransferETH(_addr, totalPull);
+        }
     }
 
     function getBidDepositAddr(
@@ -240,6 +243,14 @@ contract Auction is Multicallable, Test {
         bytes memory
     ) internal view returns (bool) {
         return true;
+    }
+
+    function _asyncSend(address _addr, uint256 _amount) internal {
+        if (_amount > 0) {
+            if (_addr == address(0)) _addr = owner;
+            uint256 totalPending = pendingPulls[_addr] + _amount;
+            emit AsyncSend(_addr, _amount, totalPending);
+        }
     }
 
     function max(uint256 _a, uint256 _b) internal pure returns (uint256) {
