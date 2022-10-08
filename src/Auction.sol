@@ -2,11 +2,12 @@
 pragma solidity 0.8.15;
 
 import {IERC721} from "@openzeppelin/token/ERC721/IERC721.sol";
+import {Test} from "forge-std/Test.sol";
 import {SafeTransferLib} from "solmate/utils/SafeTransferLib.sol";
 import {Multicallable} from "solady/utils/Multicallable.sol";
 
 /// @author philogy <https://github.com/philogy>
-contract Auction is Multicallable {
+contract Auction is Multicallable, Test {
     event OwnershipTransferred(
         address indexed previousOwner,
         address indexed newOwner
@@ -96,7 +97,7 @@ contract Auction is Multicallable {
     function startReveal() external {
         if (storedBlockHash != bytes32(0)) revert RevealAlreadyStarted();
         uint256 revealStartBlockCached = revealStartBlock;
-        if (block.number < revealStartBlockCached) revert NotYetRevealBlock();
+        if (block.number <= revealStartBlockCached) revert NotYetRevealBlock();
         storedBlockHash = blockhash(
             max(block.number - 256, revealStartBlockCached)
         );

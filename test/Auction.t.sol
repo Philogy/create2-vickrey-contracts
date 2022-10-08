@@ -2,16 +2,56 @@
 pragma solidity 0.8.15;
 
 import {BaseTest} from "./utils/BaseTest.sol";
+import {Auction} from "../src/Auction.sol";
+import {MockERC721} from "./mocks/MockERC721.sol";
+import {Clones} from "@openzeppelin/proxy/Clones.sol";
 
 /// @author philogy <https://github.com/philogy>
 contract AuctionTest is BaseTest {
     uint256 internal constant TOTAL_USERS = 5;
+    address payable internal baseAuction;
 
     function setUp() public {
+        vm.roll(10000);
         initUsers(TOTAL_USERS);
+        baseAuction = payable(new Auction());
     }
 
-    function testAddr1() public {
-        emit log_named_address("users[0]", users[0]);
+    function testCannotReinitialize() public {
+        Auction auction = createAuction(
+            users[0],
+            block.number + 100,
+            bytes32(0)
+        );
+        vm.expectRevert(Auction.AlreadyInitialized.selector);
+        auction.initialize(users[0], block.number + 10, bytes32(0));
+    }
+
+    function testBidAddress() public {
+        uint256 revealStartBlock = block.number + 100;
+        Auction auction = createAuction(
+            users[0],
+            block.number + 100,
+            bytes32(0)
+        );
+        bytes32 subSalt = genBytes32();
+        uint256 bid = 0.05 ether;
+        (, address bidAddr) = auction.getBidDepositAddr(users[1], bid, subSalt);
+        vm.deal(bidAddr, bid);
+
+        vm.roll(revealStartBlock + 1);
+        auction.startReveal();
+
+        address realBidAddr = auction.reveal(users[1], bid, subSalt, bid, "");
+        assertEq(bidAddr, realBidAddr);
+    }
+
+    function createAuction(
+        address _initialOwner,
+        uint256 _revealStartBlock,
+        bytes32 _tokenCommit
+    ) internal returns (Auction a) {
+        a = Auction(payable(Clones.clone(baseAuction)));
+        a.initialize(_initialOwner, _revealStartBlock, _tokenCommit);
     }
 }

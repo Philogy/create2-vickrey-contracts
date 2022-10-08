@@ -15,7 +15,7 @@ contract AuctionFactory is ERC721TokenReceiver {
         uint256 revealStartBlock
     );
 
-    error DirectAuctionCreate();
+    error NotCallable();
     error InvalidERC721ReceiveData();
 
     address public immutable auctionImplementation;
@@ -26,36 +26,7 @@ contract AuctionFactory is ERC721TokenReceiver {
     }
 
     function internalCreateAuction(address, uint256) external {
-        revert DirectAuctionCreate();
-    }
-
-    function createAuction(
-        address _beneficiary,
-        address _collection,
-        uint256 _tokenId,
-        uint256 _revealStartBlock
-    ) external {
-        if (msg.sender != address(this)) revert DirectAuctionCreate();
-        address newAuction = Clones.clone(auctionImplementation);
-        bytes32 tokenCommit;
-        assembly {
-            mstore(0x00, _collection)
-            mstore(0x20, _tokenId)
-            tokenCommit := keccak256(0x00, 0x40)
-        }
-        Auction(payable(newAuction)).initialize(
-            _beneficiary,
-            _revealStartBlock,
-            tokenCommit
-        );
-        isAuction[newAuction] = true;
-        emit AuctionCreated(
-            newAuction,
-            _collection,
-            _tokenId,
-            _revealStartBlock
-        );
-        IERC721(_collection).transferFrom(address(this), newAuction, _tokenId);
+        revert NotCallable();
     }
 
     function onERC721Received(
@@ -82,18 +53,21 @@ contract AuctionFactory is ERC721TokenReceiver {
             (address, uint256)
         );
 
-        try
-            this.createAuction(
-                beneficiary,
-                msg.sender,
-                _tokenId,
-                revealStartBlock
-            )
-        {} catch (bytes memory errorData) {
-            assembly {
-                revert(add(errorData, 0x20), mload(errorData))
-            }
+        address newAuction = Clones.clone(auctionImplementation);
+        bytes32 tokenCommit;
+        assembly {
+            mstore(0x00, caller())
+            mstore(0x20, _tokenId)
+            tokenCommit := keccak256(0x00, 0x40)
         }
+        Auction(payable(newAuction)).initialize(
+            beneficiary,
+            revealStartBlock,
+            tokenCommit
+        );
+        isAuction[newAuction] = true;
+        emit AuctionCreated(newAuction, msg.sender, _tokenId, revealStartBlock);
+        IERC721(msg.sender).transferFrom(address(this), newAuction, _tokenId);
 
         return ERC721TokenReceiver.onERC721Received.selector;
     }
