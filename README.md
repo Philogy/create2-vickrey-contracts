@@ -5,6 +5,7 @@ Slides: https://docs.google.com/presentation/d/1k9VUYWwi4LGSbRzpbTT5iulnp2qJmBCS
 HackMD: https://hackmd.io/5L4XAj0BQhOlugIXiZuu5Q
 
 ###Frontend: 
+
 Development: https://github.com/outdoteth/vickrey-auction-frontend
 
 Prod: https://github.com/Divide-By-0/vickrey-auction-frontend
