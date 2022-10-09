@@ -43,7 +43,7 @@ contract AuctionTest is BaseTest {
         vm.roll(revealStartBlock + 1);
         auction.startReveal();
 
-        address realBidAddr = auction.reveal(users[1], bid, subSalt, bid, "");
+        address realBidAddr = auction.reveal(users[1], bid, subSalt, bid);
         assertEq(bidAddr, realBidAddr);
     }
 
@@ -86,7 +86,7 @@ contract AuctionTest is BaseTest {
         auction.startReveal();
 
         for (uint256 i; i < 4; i++) {
-            auction.reveal(users[i], bids[i], subSalts[i], bids[i], "");
+            auction.reveal(users[i], bids[i], subSalts[i], bids[i]);
         }
 
         // check final results
