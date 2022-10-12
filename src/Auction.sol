@@ -102,7 +102,7 @@ contract Auction is Multicallable {
         owner = _newOwner;
     }
 
-    function startReveal() external {
+    function startReveal() public {
         if (storedBlockHash != bytes32(0)) revert RevealAlreadyStarted();
         uint256 revealStartBlockCached = revealStartBlock;
         if (block.number <= revealStartBlockCached) revert NotYetRevealBlock();
@@ -122,7 +122,6 @@ contract Auction is Multicallable {
     ) external returns (address bidAddr) {
         uint256 totalBid;
         {
-            if (revealStartBlock + 7200 < block.number) revert RevealOver();
             bytes32 storedBlockHashCached = storedBlockHash;
             if (storedBlockHashCached == bytes32(0)) revert NotYetReveal();
             (bytes32 salt, address depositAddr) = getBidDepositAddr(
@@ -172,7 +171,6 @@ contract Auction is Multicallable {
     }
 
     function claimWin(address _collection, uint256 _tokenId) external {
-        if (revealStartBlock + 7200 >= block.number) revert RevealNotOver();
         bytes32 passedTokenCommit;
         assembly {
             mstore(0x00, _collection)
