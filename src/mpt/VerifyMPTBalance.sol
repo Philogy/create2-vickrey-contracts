@@ -9,11 +9,11 @@ import {RLPEncode} from "../rlp/RLPEncode.sol";
 library VerifyMPTBalance {
     using MPT for MPT.MerkleProof;
 
-    uint256 internal constant _EMPTY_CODE_HASH =
-        0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470;
+    uint256 internal constant _EMPTY_NONCE = 0;
     uint256 internal constant _EMPTY_STORAGE_HASH =
         0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421;
-    uint256 internal constant _EMPTY_NONCE = 0;
+    uint256 internal constant _EMPTY_CODE_HASH =
+        0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470;
 
     function isValidEmptyAccountBalanceProof(
         EthereumDecoder.BlockHeader memory _header,
