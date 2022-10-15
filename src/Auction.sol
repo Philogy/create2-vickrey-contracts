@@ -4,12 +4,12 @@ pragma solidity >=0.8.15;
 import {IERC721} from "@openzeppelin/token/ERC721/IERC721.sol";
 import {SafeTransferLib} from "solmate/utils/SafeTransferLib.sol";
 import {Multicallable} from "solady/utils/Multicallable.sol";
-import "../interface/iProver.sol";
-import "../lib/ECVerify.sol";
+import {EthereumDecoder} from "./mpt/EthereumDecoder.sol";
+import {VerifyMPTBalance} from "./mpt/VerifyMPTBalance.sol";
 
 /// @author philogy <https://github.com/philogy>
 contract Auction is Multicallable {
-    using MPT for MPT.MerkleProof;
+    using EthereumDecoder for EthereumDecoder.BlockHeader;
 
     event OwnershipTransferred(
         address indexed previousOwner,
@@ -119,13 +119,8 @@ contract Auction is Multicallable {
         uint256 _bid,
         bytes32 _subSalt,
         uint256 _balAtSnapshot,
-        // Proof
-        EthereumDecoder.BlockHeader memory header,
-        MPT.MerkleProof memory accountdata,
-        uint256 balance,
-        uint256 codeHash,
-        uint256 storageHash,
-        address contractAddress
+        EthereumDecoder.BlockHeader memory _header,
+        MPT.MerkleProof memory _accountDataProof
     ) external returns (address bidAddr) {
         uint256 totalBid;
         {
@@ -138,12 +133,14 @@ contract Auction is Multicallable {
                 _subSalt
             );
 
-            if(getBlockHash(header) != storedBlockHashCached) revert InvalidProof();
-            if(depositAddr != contractAddress) revert InvalidProof();
-            if(balance != _balAtSnapshot) revert InvalidProof();
+            if (depositAddr != contractAddress) revert InvalidProof();
+            if (balance != _balAtSnapshot) revert InvalidProof();
             if (
-                !verifyAccount(
-                    header, accountdata, balance, codeHash, storageHash, contractAddress
+                _header.getBlockHash() != storedBlockHashCached &&
+                !VerifyMPTBalance.isValidEmptyAccountBalanceProof(
+                    _header,
+                    _accountDataProof,
+                    _balance
                 )
             ) revert InvalidProof();
 
@@ -223,6 +220,7 @@ contract Auction is Multicallable {
         bytes32 _subSalt
     ) public view returns (bytes32 salt, address depositAddr) {
         assembly {
+            // compute the initcode hash
             mstore(0x00, BID_EXTRACTOR_CODE)
             let bidExtractorInitHash := keccak256(
                 BID_EXTRACTOR_CODE_OFFSET,
@@ -230,11 +228,13 @@ contract Auction is Multicallable {
             )
             let freeMem := mload(0x40)
 
+            // compute the actual create2 salt
             mstore(freeMem, _bidder)
             mstore(add(freeMem, 0x20), _bid)
             mstore(add(freeMem, 0x40), _subSalt)
             salt := keccak256(freeMem, 0x60)
 
+            // predict create2 address
             mstore(add(freeMem, 0x14), address())
             mstore(freeMem, 0xff)
             mstore(add(freeMem, 0x34), salt)
@@ -242,15 +242,6 @@ contract Auction is Multicallable {
 
             depositAddr := keccak256(add(freeMem, 0x1f), 0x55)
         }
-    }
-
-    function _verifyProof(
-        bytes32,
-        address,
-        uint256,
-        bytes memory
-    ) internal view returns (bool) {
-        return true;
     }
 
     function _asyncSend(address _addr, uint256 _amount) internal {
@@ -269,82 +260,4 @@ contract Auction is Multicallable {
     function min(uint256 _a, uint256 _b) internal pure returns (uint256) {
         return _a < _b ? _a : _b;
     }
-
-// Prover functions
-
-  function verifyTrieProof(MPT.MerkleProof memory data) public view override returns (bool) {
-    return data.verifyTrieProof();
-  }
-
-  function verifyAccount(
-    EthereumDecoder.BlockHeader memory header,
-    MPT.MerkleProof memory accountdata,
-    uint256 balance,
-    uint256 codeHash,
-    uint256 storageHash,
-    address contractAddress
-  ) public override returns (bool valid, string memory reason) {
-    bytes[] memory accountState = new bytes[](4);
-    accountState[0] = RLPEncode.encodeUint(0);
-    accountState[1] = RLPEncode.encodeUint(balance);
-    accountState[2] = RLPEncode.encodeUint(codeHash);
-    accountState[3] = RLPEncode.encodeUint(storageHash);
-
-    if (header.stateRoot != accountdata.expectedRoot) return (false, "verifyAccount - different trie roots");
-    if (keccak256(RLPEncode.encodeList(accountState)) != keccak256(accountdata.expectedValue)) return (false, "verifyAccount - different account data");
-    if (bytesToBytes32(removeEveryTwo(accountdata.key)) != keccak256(abi.encodePacked(contractAddress))) return (false, "verifyAccount - different account address");
-
-    // if(keccak256(keccak256(contractAddress)) != keccak256(accountdata.key)) return (false, "verifyAccount - different contract address");
-    valid = accountdata.verifyTrieProof();
-    if (!valid) return (false, "verifyAccount - invalid proof");
-
-    return (true, "");
-  }
-
-  // Exposing encoder & decoder functions
-  function getTransactionHash(bytes memory signedTransaction) public pure returns (bytes32 hash) {
-    hash = keccak256(signedTransaction);
-  }
-
-  function getBlockHash(EthereumDecoder.BlockHeader memory header) public pure returns (bytes32 hash) {
-    return keccak256(getBlockRlpData(header));
-  }
-
-  function getBlockRlpData(EthereumDecoder.BlockHeader memory header) public pure returns (bytes memory data) {
-    return EthereumDecoder.getBlockRlpData(header);
-  }
-
-  function toBlockHeader(bytes memory data) public pure returns (EthereumDecoder.BlockHeader memory header) {
-    unchecked {
-      return EthereumDecoder.toBlockHeader(data);
-    }
-  }
-
-  function toAccount(bytes memory data) public pure returns (EthereumDecoder.Account memory account) {
-    return EthereumDecoder.toAccount(data);
-  }
-
-  function removeEveryTwo(bytes memory b) internal returns (bytes memory out) {
-    assembly {
-      out := mload(0x40)
-      let lenB := mload(b)
-      for {
-        let i := 0
-      } lt(i, lenB) {
-        i := add(i, 2)
-      } {
-        // Isolates every 2 bytes (by rightshifting the next word by 240/256 bits), then extract the last 4 bits and keep them around, and add them to a 4 bit-right shifted middle 4 bits, to remove the 0s in between
-        mstore8(add(out, add(0x20, shr(1, i))), add(mod(shr(240, mload(add(b, add(0x20, i)))), 16), shr(4, and(0x0f00, shr(240, mload(add(b, add(0x20, i))))))))
-      }
-      let lenOut := div(lenB, 2)
-      mstore(out, lenOut)
-      mstore(0x40, add(out, add(0x20, shl(5, shr(5, add(lenOut, 0x1f))))))
-    }
-  }
-
-  function bytesToBytes32(bytes memory value) public returns (bytes32 result) {
-    assembly {
-      result := mload(add(value, 32))
-    }
-  }
 }
