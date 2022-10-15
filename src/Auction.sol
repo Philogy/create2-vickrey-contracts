@@ -136,7 +136,7 @@ contract Auction is Multicallable {
             if (depositAddr != contractAddress) revert InvalidProof();
             if (balance != _balAtSnapshot) revert InvalidProof();
             if (
-                _header.getBlockHash() != storedBlockHashCached &&
+                _header.getBlockHash() != storedBlockHashCached ||
                 !VerifyMPTBalance.isValidEmptyAccountBalanceProof(
                     _header,
                     _accountDataProof,
