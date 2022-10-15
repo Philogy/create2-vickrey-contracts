@@ -115,9 +115,4 @@ contract ProofTest is Test {
             hex"0f010d03090f060f05000401020f0f0b0300020502080d070203040a050701060a0b0b0f090a0506000e0e0d070f0c020b040e09080e06010d07000004000402"
         );
     }
-
-    function run() public {
-        setUp();
-        testAccountProof();
-    }
 }
