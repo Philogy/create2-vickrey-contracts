@@ -6,6 +6,7 @@ import {SafeTransferLib} from "solmate/utils/SafeTransferLib.sol";
 import {Multicallable} from "solady/utils/Multicallable.sol";
 import {EthereumDecoder} from "./mpt/EthereumDecoder.sol";
 import {VerifyMPTBalance} from "./mpt/VerifyMPTBalance.sol";
+import {MPT} from "./mpt/MPT.sol";
 
 /// @author philogy <https://github.com/philogy>
 contract Auction is Multicallable {
@@ -133,14 +134,12 @@ contract Auction is Multicallable {
                 _subSalt
             );
 
-            if (depositAddr != contractAddress) revert InvalidProof();
-            if (balance != _balAtSnapshot) revert InvalidProof();
             if (
                 _header.getBlockHash() != storedBlockHashCached ||
                 !VerifyMPTBalance.isValidEmptyAccountBalanceProof(
                     _header,
                     _accountDataProof,
-                    _balance
+                    _balAtSnapshot
                 )
             ) revert InvalidProof();
 
