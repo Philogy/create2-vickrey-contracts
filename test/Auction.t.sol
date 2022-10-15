@@ -5,11 +5,28 @@ import {BaseTest} from "./utils/BaseTest.sol";
 import {Auction} from "../src/Auction.sol";
 import {MockERC721} from "./mocks/MockERC721.sol";
 import {Clones} from "@openzeppelin/proxy/Clones.sol";
+import {EthereumDecoder} from "../src/mpt/EthereumDecoder.sol";
+import {MPT} from "../src/mpt/MPT.sol";
+
+contract NoVerifyTestAuction is Auction {
+    function _verifyProof(
+        EthereumDecoder.BlockHeader memory,
+        MPT.MerkleProof memory,
+        uint256,
+        address,
+        bytes32
+    ) internal override returns (bool) {
+        return true;
+    }
+}
 
 /// @author philogy <https://github.com/philogy>
 contract AuctionTest is BaseTest {
     uint256 internal constant TOTAL_USERS = 5;
     address payable internal baseAuction;
+
+    EthereumDecoder.BlockHeader internal emptyHeader;
+    MPT.MerkleProof internal emptyProof;
 
     event OwnershipTransferred(
         address indexed previousOwner,
@@ -19,7 +36,7 @@ contract AuctionTest is BaseTest {
     function setUp() public {
         vm.roll(10000);
         initUsers(TOTAL_USERS);
-        baseAuction = payable(new Auction());
+        baseAuction = payable(new NoVerifyTestAuction());
     }
 
     function testCannotReinitialize() public {
@@ -43,7 +60,14 @@ contract AuctionTest is BaseTest {
         vm.roll(revealStartBlock + 1);
         auction.startReveal();
 
-        address realBidAddr = auction.reveal(users[1], bid, subSalt, bid, "");
+        address realBidAddr = auction.reveal(
+            users[1],
+            bid,
+            subSalt,
+            bid,
+            emptyHeader,
+            emptyProof
+        );
         assertEq(bidAddr, realBidAddr);
     }
 
@@ -86,7 +110,14 @@ contract AuctionTest is BaseTest {
         auction.startReveal();
 
         for (uint256 i; i < 4; i++) {
-            auction.reveal(users[i], bids[i], subSalts[i], bids[i], "");
+            auction.reveal(
+                users[i],
+                bids[i],
+                subSalts[i],
+                bids[i],
+                emptyHeader,
+                emptyProof
+            );
         }
 
         // check final results

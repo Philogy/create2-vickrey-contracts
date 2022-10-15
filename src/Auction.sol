@@ -64,7 +64,7 @@ contract Auction is Multicallable {
 
     bytes32 public tokenCommit;
 
-    // make core deployment uninitializable
+    // make implementation deployment uninitializable
     constructor() {
         owner = address(0x000000000000000000000000000000000000dEaD);
         revealStartBlock = type(uint96).max;
@@ -135,11 +135,12 @@ contract Auction is Multicallable {
             );
 
             if (
-                _header.getBlockHash() != storedBlockHashCached ||
-                !VerifyMPTBalance.isValidEmptyAccountBalanceProof(
+                !_verifyProof(
                     _header,
                     _accountDataProof,
-                    _balAtSnapshot
+                    _balAtSnapshot,
+                    depositAddr,
+                    storedBlockHashCached
                 )
             ) revert InvalidProof();
 
@@ -241,6 +242,23 @@ contract Auction is Multicallable {
 
             depositAddr := keccak256(add(freeMem, 0x1f), 0x55)
         }
+    }
+
+    function _verifyProof(
+        EthereumDecoder.BlockHeader memory _header,
+        MPT.MerkleProof memory _accountDataProof,
+        uint256 _balance,
+        address _expectedAddr,
+        bytes32 _storedBlockHash
+    ) internal virtual returns (bool) {
+        return
+            _header.getBlockHash() == _storedBlockHash &&
+            VerifyMPTBalance.isValidEmptyAccountBalanceProof(
+                _header,
+                _accountDataProof,
+                _balance,
+                _expectedAddr
+            );
     }
 
     function _asyncSend(address _addr, uint256 _amount) internal {
