@@ -3,6 +3,7 @@ pragma solidity 0.8.15;
 
 import {BaseTest} from "./utils/BaseTest.sol";
 import {AuctionFactory} from "../src/AuctionFactory.sol";
+import {Auction} from "../src/Auction.sol";
 import {MockERC721} from "./mocks/MockERC721.sol";
 
 /// @author philogy <https://github.com/philogy>
@@ -14,7 +15,7 @@ contract AuctionFactoryTest is BaseTest {
 
     function setUp() public {
         initUsers(TOTAL_USERS);
-        factory = new AuctionFactory();
+        factory = new AuctionFactory(address(new Auction()));
         token = new MockERC721();
         vm.roll(block.number + 10000);
     }

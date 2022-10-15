@@ -21,8 +21,8 @@ contract AuctionFactory is ERC721TokenReceiver {
     address public immutable auctionImplementation;
     mapping(address => bool) public isAuction;
 
-    constructor() {
-        auctionImplementation = address(new Auction());
+    constructor(address _auctionImplementation) {
+        auctionImplementation = _auctionImplementation;
     }
 
     function innerCreateAuction(address, uint256) external {

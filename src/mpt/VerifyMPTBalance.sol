@@ -18,7 +18,8 @@ library VerifyMPTBalance {
     function isValidEmptyAccountBalanceProof(
         EthereumDecoder.BlockHeader memory _header,
         MPT.MerkleProof memory _accountDataProof,
-        uint256 _balance
+        uint256 _balance,
+        address
     ) internal pure returns (bool) {
         if (_header.stateRoot != _accountDataProof.expectedRoot) return false;
 
