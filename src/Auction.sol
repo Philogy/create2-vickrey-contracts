@@ -4,11 +4,13 @@ pragma solidity >=0.8.15;
 import {IERC721} from "@openzeppelin/token/ERC721/IERC721.sol";
 import {SafeTransferLib} from "solmate/utils/SafeTransferLib.sol";
 import {Multicallable} from "solady/utils/Multicallable.sol";
+import {FixedPointMathLib} from "solady/utils/FixedPointMathLib.sol";
 import {EthereumDecoder} from "./mpt/EthereumDecoder.sol";
 import {VerifyMPTBalance} from "./mpt/VerifyMPTBalance.sol";
 import {MPT} from "./mpt/MPT.sol";
 
 /// @author philogy <https://github.com/philogy>
+/// @author (contributor) 0xBeans <https://github.com/0xBeans>
 contract Auction is Multicallable {
     using EthereumDecoder for EthereumDecoder.BlockHeader;
 
@@ -30,6 +32,7 @@ contract Auction is Multicallable {
         uint256 totalPendingAmount
     );
     event WinClaimed(address indexed winner, uint256 paidBid, uint256 refund);
+    event Slashed(address indexed bidder, uint256 paidBid, uint256 refund);
 
     error AlreadyInitialized();
     error InvalidRevealStartBlock();
@@ -39,6 +42,7 @@ contract Auction is Multicallable {
     error NotOwner();
 
     error RevealAlreadyStarted();
+    error RevealInProgress();
     error NotYetRevealBlock();
     error NotYetReveal();
     error RevealOver();
@@ -51,6 +55,7 @@ contract Auction is Multicallable {
     uint256 internal constant BID_EXTRACTOR_CODE = 0x3d3d3d3d47335af1;
     uint256 internal constant BID_EXTRACTOR_CODE_SIZE = 0x8;
     uint256 internal constant BID_EXTRACTOR_CODE_OFFSET = 0x18;
+    uint256 internal constant SLASH_AMT = 0.33e18; // amount to slash for late reveal
 
     mapping(address => uint256) public pendingPulls;
 
@@ -182,6 +187,83 @@ contract Auction is Multicallable {
             sndBidCached,
             actualBid
         );
+    }
+
+    /*
+     * @notice For any reveals that happen after the alloted reveal time.
+     * @dev Slashing will occur in certain instances. No need to check proof.
+     * */
+    function lateReveal(
+        address _bidder,
+        uint256 _bid,
+        bytes32 _subSalt
+    ) external returns (address bidAddr) {
+        uint256 totalBid;
+        uint256 refundAmt;
+
+        if (revealStartBlock + 7200 > block.number) {
+            revert RevealInProgress();
+        }
+
+        bytes32 storedBlockHashCached = storedBlockHash;
+        (bytes32 salt, address depositAddr) = getBidDepositAddr(
+            _bidder,
+            _bid,
+            _subSalt
+        );
+
+        uint256 balBefore = address(this).balance;
+        assembly {
+            mstore(0x00, BID_EXTRACTOR_CODE)
+            bidAddr := create2(
+                0,
+                BID_EXTRACTOR_CODE_OFFSET,
+                BID_EXTRACTOR_CODE_SIZE,
+                salt
+            )
+        }
+        totalBid = address(this).balance - balBefore;
+
+        unchecked {
+            // see if bidder needs to get slashed
+            refundAmt = totalBid - _getSlashAmt(totalBid);
+        }
+
+        _asyncSend(_bidder, refundAmt);
+
+        emit Slashed(_bidder, totalBid, refundAmt);
+    }
+
+    /*
+     * @dev Slashing logic.
+     * If bid < sndBid, it means the bidder would not have affected the auction in any way
+     * even if they revealed on time - return all funds with no slashing.
+     *
+     * If bid > sndBid && bid < topBid, this bidder would have affected the auction but would not have won.
+     * The auction house lost `_bid - snd` in value due to late reveal - slash the amount the auction would have received.
+     *
+     * If bid > topBid, this bidder affected the auction immensely as they would have won the auction. Slash the amount
+     * the auction house lost along with a 33% additional slash to completely disinsentivize late reveals for winning bids.
+     * */
+    function _getSlashAmt(uint256 _bid) internal returns (uint256 slashAmt) {
+        unchecked {
+            if (_bid > topBid) {
+                uint256 difference = topBid - sndBid;
+                uint256 amtAfterSlash = _bid - difference;
+
+                // update topBid incase newer late reveals are higher than this amount
+                topBid = uint128(_bid);
+
+                slashAmt =
+                    difference +
+                    FixedPointMathLib.mulWadDown(amtAfterSlash, SLASH_AMT);
+            } else if (_bid > sndBid) {
+                slashAmt = _bid - sndBid;
+
+                // update sndBid incase newer late reveals are higher than this amount
+                sndBid = uint128(_bid);
+            }
+        }
     }
 
     function claimWin(address _collection, uint256 _tokenId) external {
