@@ -25,6 +25,8 @@ contract AuctionTest is BaseTest {
     uint256 internal constant TOTAL_USERS = 5;
     address payable internal baseAuction;
 
+    address internal factoryOwner = address(0x69);
+
     EthereumDecoder.BlockHeader internal emptyHeader;
     MPT.MerkleProof internal emptyProof;
 
@@ -46,7 +48,12 @@ contract AuctionTest is BaseTest {
             bytes32(0)
         );
         vm.expectRevert(Auction.AlreadyInitialized.selector);
-        auction.initialize(users[0], block.number + 10, bytes32(0));
+        auction.initialize(
+            users[0],
+            factoryOwner,
+            block.number + 10,
+            bytes32(0)
+        );
     }
 
     function testBidAddress() public {
@@ -147,7 +154,12 @@ contract AuctionTest is BaseTest {
         bytes32 _tokenCommit
     ) internal returns (Auction a) {
         a = Auction(payable(Clones.clone(baseAuction)));
-        a.initialize(_initialOwner, _revealStartBlock, _tokenCommit);
+        a.initialize(
+            _initialOwner,
+            factoryOwner,
+            _revealStartBlock,
+            _tokenCommit
+        );
     }
 
     function testLateReveal() public {
@@ -159,8 +171,8 @@ contract AuctionTest is BaseTest {
         bids[0] = 10e18; // bidder will reveal on time
         bids[1] = 12e18; // bidder will reveal on time
         bids[2] = 11e18; // bidder will not reveal on time
-        bids[3] = 7e18; // bidder will not reveal on time
-        bids[4] = 17e18; // bidder will not reveal on time
+        bids[3] = 17e18; // bidder will not reveal on time
+        bids[4] = 7e18; // bidder will not reveal on time
 
         // create and fund bids
         bytes32[5] memory subSalts;
@@ -228,12 +240,16 @@ contract AuctionTest is BaseTest {
         /// should be get slashed since they revealed late, bid - sndBid
         assertEq(users[2].balance, 10e18);
 
-        // this bidder would not have affected auction even if they revealed on time
-        // no slashing
-        assertEq(users[3].balance, 7e18);
-
         // this bidder would have won but they revealed late,
         // should be get slashed significantly
-        assertEq(users[4].balance, 10.72e18);
+        assertEq(users[3].balance, 10.72e18);
+
+        // this bidder would not have affected auction even if they revealed on time
+        // no slashing
+        assertEq(users[4].balance, 7e18);
+
+        // assert slashed funds go to factory owner
+        auction.pull(factoryOwner);
+        assertEq(factoryOwner.balance, 7.28e18);
     }
 }
