@@ -32,11 +32,12 @@ contract Auction is Multicallable {
         uint256 totalPendingAmount
     );
     event WinClaimed(address indexed winner, uint256 paidBid, uint256 refund);
-    event Slashed(address indexed bidder, uint256 paidBid, uint256 refund);
+    event Slashed(address indexed bidder, uint256 paidBid, uint256 slashed);
 
     error AlreadyInitialized();
     error InvalidRevealStartBlock();
     error InvalidInitialOwner();
+    error InvalidFactoryOwner();
 
     error TransferOwnerToZero();
     error NotOwner();
@@ -60,6 +61,7 @@ contract Auction is Multicallable {
     mapping(address => uint256) public pendingPulls;
 
     address public owner;
+    address public factoryOwner;
     uint96 public revealStartBlock;
     bytes32 public storedBlockHash;
 
@@ -79,13 +81,16 @@ contract Auction is Multicallable {
 
     function initialize(
         address _initialOwner,
+        address _factoryOwner,
         uint256 _revealStartBlock,
         bytes32 _tokenCommit
     ) external {
         if (owner != address(0)) revert AlreadyInitialized();
+        if (_factoryOwner == address(0)) revert InvalidFactoryOwner();
         if (_initialOwner == address(0)) revert InvalidInitialOwner();
         if (_revealStartBlock <= block.number) revert InvalidRevealStartBlock();
         owner = _initialOwner;
+        factoryOwner = _factoryOwner;
         revealStartBlock = uint96(_revealStartBlock);
         emit OwnershipTransferred(address(0), _initialOwner);
         tokenCommit = _tokenCommit;
@@ -224,14 +229,15 @@ contract Auction is Multicallable {
         }
         totalBid = address(this).balance - balBefore;
 
+        uint256 slashed = _getSlashAmt(totalBid);
+
         unchecked {
-            // see if bidder needs to get slashed
-            refundAmt = totalBid - _getSlashAmt(totalBid);
+            // send slash amount to factory
+            _asyncSend(factoryOwner, slashed);
+            _asyncSend(_bidder, totalBid - slashed);
         }
 
-        _asyncSend(_bidder, refundAmt);
-
-        emit Slashed(_bidder, totalBid, refundAmt);
+        emit Slashed(_bidder, totalBid, slashed);
     }
 
     /*
@@ -244,11 +250,16 @@ contract Auction is Multicallable {
      *
      * If bid > topBid, this bidder affected the auction immensely as they would have won the auction. Slash the amount
      * the auction house lost along with a 33% additional slash to completely disinsentivize late reveals for winning bids.
+     *
+     * Slash amount goes directly to the auction factory rather than auction owner to disincentivize auction rigging.
      * */
     function _getSlashAmt(uint256 _bid) internal returns (uint256 slashAmt) {
+        uint128 topBidCached = topBid;
+        uint128 sndBidCached = sndBid;
+
         unchecked {
-            if (_bid > topBid) {
-                uint256 difference = topBid - sndBid;
+            if (_bid > topBidCached) {
+                uint256 difference = topBidCached - sndBid;
                 uint256 amtAfterSlash = _bid - difference;
 
                 // update topBid incase newer late reveals are higher than this amount
@@ -257,8 +268,8 @@ contract Auction is Multicallable {
                 slashAmt =
                     difference +
                     FixedPointMathLib.mulWadDown(amtAfterSlash, SLASH_AMT);
-            } else if (_bid > sndBid) {
-                slashAmt = _bid - sndBid;
+            } else if (_bid > sndBidCached) {
+                slashAmt = _bid - sndBidCached;
 
                 // update sndBid incase newer late reveals are higher than this amount
                 sndBid = uint128(_bid);
