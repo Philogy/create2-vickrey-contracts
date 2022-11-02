@@ -65,7 +65,6 @@ contract AuctionFactory is ERC721TokenReceiver, OwnableRoles {
         }
         Auction(payable(newAuction)).initialize(
             beneficiary,
-            address(this),
             revealStartBlock,
             tokenCommit
         );
