@@ -37,7 +37,6 @@ contract Auction is Multicallable {
     error AlreadyInitialized();
     error InvalidRevealStartBlock();
     error InvalidInitialOwner();
-    error InvalidFactoryOwner();
 
     error TransferOwnerToZero();
     error NotOwner();
@@ -58,10 +57,11 @@ contract Auction is Multicallable {
     uint256 internal constant BID_EXTRACTOR_CODE_OFFSET = 0x18;
     uint256 internal constant SLASH_AMT = 0.33e18; // amount to slash for late reveal
 
+    address public immutable factory; // address of factory
+
     mapping(address => uint256) public pendingPulls;
 
     address public owner;
-    address public factoryOwner;
     uint96 public revealStartBlock;
     bytes32 public storedBlockHash;
 
@@ -72,25 +72,23 @@ contract Auction is Multicallable {
     bytes32 public tokenCommit;
 
     // make implementation deployment uninitializable
-    constructor() {
+    constructor(address _factory) {
         owner = address(0x000000000000000000000000000000000000dEaD);
         revealStartBlock = type(uint96).max;
+        factory = _factory;
     }
 
     receive() external payable {}
 
     function initialize(
         address _initialOwner,
-        address _factoryOwner,
         uint256 _revealStartBlock,
         bytes32 _tokenCommit
     ) external {
         if (owner != address(0)) revert AlreadyInitialized();
-        if (_factoryOwner == address(0)) revert InvalidFactoryOwner();
         if (_initialOwner == address(0)) revert InvalidInitialOwner();
         if (_revealStartBlock <= block.number) revert InvalidRevealStartBlock();
         owner = _initialOwner;
-        factoryOwner = _factoryOwner;
         revealStartBlock = uint96(_revealStartBlock);
         emit OwnershipTransferred(address(0), _initialOwner);
         tokenCommit = _tokenCommit;
@@ -233,7 +231,9 @@ contract Auction is Multicallable {
 
         unchecked {
             // send slash amount to factory
-            _asyncSend(factoryOwner, slashed);
+            SafeTransferLib.safeTransferETH(factory, slashed);
+
+            // give post slashed amount back to bidder
             _asyncSend(_bidder, totalBid - slashed);
         }
 

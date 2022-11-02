@@ -8,7 +8,11 @@ import {Clones} from "@openzeppelin/proxy/Clones.sol";
 import {EthereumDecoder} from "../src/mpt/EthereumDecoder.sol";
 import {MPT} from "../src/mpt/MPT.sol";
 
+address public constant auctionFactory = address(0x69);
+
 contract NoVerifyTestAuction is Auction {
+    constructor() Auction(auctionFactory) {}
+
     function _verifyProof(
         EthereumDecoder.BlockHeader memory,
         MPT.MerkleProof memory,
@@ -24,8 +28,6 @@ contract NoVerifyTestAuction is Auction {
 contract AuctionTest is BaseTest {
     uint256 internal constant TOTAL_USERS = 5;
     address payable internal baseAuction;
-
-    address internal factoryOwner = address(0x69);
 
     EthereumDecoder.BlockHeader internal emptyHeader;
     MPT.MerkleProof internal emptyProof;
@@ -48,12 +50,7 @@ contract AuctionTest is BaseTest {
             bytes32(0)
         );
         vm.expectRevert(Auction.AlreadyInitialized.selector);
-        auction.initialize(
-            users[0],
-            factoryOwner,
-            block.number + 10,
-            bytes32(0)
-        );
+        auction.initialize(users[0], block.number + 10, bytes32(0));
     }
 
     function testBidAddress() public {
@@ -154,12 +151,7 @@ contract AuctionTest is BaseTest {
         bytes32 _tokenCommit
     ) internal returns (Auction a) {
         a = Auction(payable(Clones.clone(baseAuction)));
-        a.initialize(
-            _initialOwner,
-            factoryOwner,
-            _revealStartBlock,
-            _tokenCommit
-        );
+        a.initialize(_initialOwner, _revealStartBlock, _tokenCommit);
     }
 
     function testLateReveal() public {
@@ -248,8 +240,7 @@ contract AuctionTest is BaseTest {
         // no slashing
         assertEq(users[4].balance, 7e18);
 
-        // assert slashed funds go to factory owner
-        auction.pull(factoryOwner);
-        assertEq(factoryOwner.balance, 7.28e18);
+        // assert slashed funds go to factory
+        assertEq(address(auctionFactory).balance, 7.28e18);
     }
 }
