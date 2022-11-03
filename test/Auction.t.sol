@@ -8,7 +8,11 @@ import {Clones} from "@openzeppelin/proxy/Clones.sol";
 import {EthereumDecoder} from "../src/mpt/EthereumDecoder.sol";
 import {MPT} from "../src/mpt/MPT.sol";
 
+address public constant auctionFactory = address(0x69);
+
 contract NoVerifyTestAuction is Auction {
+    constructor() Auction(auctionFactory) {}
+
     function _verifyProof(
         EthereumDecoder.BlockHeader memory,
         MPT.MerkleProof memory,
@@ -148,5 +152,95 @@ contract AuctionTest is BaseTest {
     ) internal returns (Auction a) {
         a = Auction(payable(Clones.clone(baseAuction)));
         a.initialize(_initialOwner, _revealStartBlock, _tokenCommit);
+    }
+
+    function testLateReveal() public {
+        // create auction
+        uint256 revealStartBlock = block.number + 100;
+        Auction auction = createAuction(users[4], revealStartBlock, bytes32(0));
+
+        uint256[] memory bids = new uint256[](5);
+        bids[0] = 10e18; // bidder will reveal on time
+        bids[1] = 12e18; // bidder will reveal on time
+        bids[2] = 11e18; // bidder will not reveal on time
+        bids[3] = 17e18; // bidder will not reveal on time
+        bids[4] = 7e18; // bidder will not reveal on time
+
+        // create and fund bids
+        bytes32[5] memory subSalts;
+        for (uint256 i; i < 5; i++) {
+            subSalts[i] = genBytes32();
+            (, address bidAddr) = auction.getBidDepositAddr(
+                users[i],
+                bids[i],
+                subSalts[i]
+            );
+            vm.deal(bidAddr, bids[i]);
+        }
+
+        vm.roll(revealStartBlock + 1);
+        auction.startReveal();
+
+        // reveal for users[0]
+        auction.reveal(
+            users[0],
+            bids[0],
+            subSalts[0],
+            bids[0],
+            emptyHeader,
+            emptyProof
+        );
+
+        // reveal for users[1]
+        auction.reveal(
+            users[1],
+            bids[1],
+            subSalts[1],
+            bids[1],
+            emptyHeader,
+            emptyProof
+        );
+
+        // assert users[1] is top bidder
+        assertEq(auction.topBidder(), users[1]);
+        assertEq(auction.topBid(), bids[1]);
+
+        // assert users[0] bid is second top bid
+        assertEq(auction.sndBid(), bids[0]);
+
+        // roll pass the reveal time, not more bids can be revealed
+        vm.roll(revealStartBlock + 7201);
+
+        // late reveal bidders that did not reveal in the correct reveal phase
+        // should be slashed
+        for (uint256 i; i < 5; i++) {
+            auction.lateReveal(users[i], bids[i], subSalts[i]);
+        }
+
+        // pull funds
+        for (uint256 i; i < 5; i++) {
+            auction.pull(users[i]);
+        }
+
+        // should get full refund as they did not win the auction
+        assertEq(users[0].balance, 10e18);
+
+        // should be 0 since they won the auction
+        assertEq(users[1].balance, 0);
+
+        // this person would've affected the auction if they revealed on time
+        /// should be get slashed since they revealed late, bid - sndBid
+        assertEq(users[2].balance, 10e18);
+
+        // this bidder would have won but they revealed late,
+        // should be get slashed significantly
+        assertEq(users[3].balance, 10.72e18);
+
+        // this bidder would not have affected auction even if they revealed on time
+        // no slashing
+        assertEq(users[4].balance, 7e18);
+
+        // assert slashed funds go to factory
+        assertEq(address(auctionFactory).balance, 7.28e18);
     }
 }

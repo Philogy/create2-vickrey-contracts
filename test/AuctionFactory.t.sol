@@ -15,7 +15,9 @@ contract AuctionFactoryTest is BaseTest {
 
     function setUp() public {
         initUsers(TOTAL_USERS);
-        factory = new AuctionFactory(address(new Auction()));
+        // we will determintiscally generate deployment addresses
+        // this is just to make tests happy :)
+        factory = new AuctionFactory(address(new Auction(address(factory))));
         token = new MockERC721();
         vm.roll(block.number + 10000);
     }
